@@ -1,37 +1,38 @@
 package com.example.loginwithsocialnetworks
 
 import android.annotation.SuppressLint
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.net.http.SslError
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
-import android.util.DisplayMetrics
 import android.util.Log
-import android.view.WindowManager
+import android.view.View
 import android.webkit.CookieManager
-import android.webkit.SslErrorHandler
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import com.facebook.CallbackManager
 import com.facebook.FacebookCallback
 import com.facebook.FacebookException
+import com.facebook.FacebookSdk
 import com.facebook.login.LoginManager
 import com.facebook.login.LoginResult
+import com.twitter.sdk.android.core.*
 import kotlinx.android.synthetic.main.activity_main.*
 import java.util.*
+import com.twitter.sdk.android.core.TwitterAuthToken
+import com.twitter.sdk.android.core.TwitterCore
+import com.twitter.sdk.android.core.TwitterSession
 
 
-class MainActivity : AppCompatActivity(), AuthenticationListener {
+class MainActivity : AppCompatActivity() {
     private val TAG = MainActivity::class.java.simpleName
     private var mCallbackManager: CallbackManager? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        initializeTwitter()
         setContentView(R.layout.activity_main)
-        initializeWebView()
 
         mCallbackManager = CallbackManager.Factory.create()
 
@@ -54,48 +55,58 @@ class MainActivity : AppCompatActivity(), AuthenticationListener {
             LoginManager.getInstance().logInWithReadPermissions(this, Arrays.asList("public_profile"))
         }
 
+
         btn_instagram_login.setOnClickListener {
-            /*val authDialog = AuthenticationDialog(this, this)
-            authDialog.setCancelable(true)
-            //authDialog.window?.setLayout(((getWidth(this) / 100) * 90), LinearLayout.LayoutParams.MATCH_PARENT)
-            //authDialog.window?.setGravity(Gravity.CENTER)
-            authDialog.show()*/
-            initializeWebView()
+            initializeInstagramWebView()
         }
+
+        setCallbackTwitterLogin()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        mCallbackManager?.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == TwitterAuthConfig.DEFAULT_AUTH_REQUEST_CODE) {
+            btn_twitter_login.onActivityResult(requestCode, resultCode, data)
+        } else if (FacebookSdk.isFacebookRequestCode(requestCode)) {
+            mCallbackManager?.onActivityResult(requestCode, resultCode, data)
+        }
+
         super.onActivityResult(requestCode, resultCode, data)
     }
 
+    //===========================INSTAGRAM================================
 
-    private fun getWidth(context: Context): Int {
-        val displayMetrics = DisplayMetrics()
-        val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        windowManager.defaultDisplay.getMetrics(displayMetrics)
-        return displayMetrics.widthPixels
+    override fun onBackPressed() {
+        if (lin_webview_instagram.visibility == View.VISIBLE) {
+            clearCacheWebView()
+            lin_webview_instagram.visibility = View.INVISIBLE
+        } else {
+            super.onBackPressed()
+        }
     }
 
-    override fun onTokenReceived(auth_token: String) {
-        Toast.makeText(this, "Login Success. auth_token=$auth_token", Toast.LENGTH_SHORT).show()
+    private fun clearCacheWebView() {
+        webview_instagram.clearFormData()
+        webview_instagram.clearHistory()
+        webview_instagram.clearMatches()
+        webview_instagram.clearCache(true)
+        //Clear previous WebView's content before loading the WebView again
+        webview_instagram.loadUrl("about:blank")
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private fun initializeWebView() {
-        CookieManager.getInstance().setAcceptThirdPartyCookies(webview, true)
-        //webView.settings.useWideViewPort = true
-        //webView.settings.loadWithOverviewMode = true
-        webview.settings.javaScriptEnabled = true
-        webview.settings.domStorageEnabled = true
-        webview.settings.setSupportMultipleWindows(true)
-        webview.clearSslPreferences()
-        webview.clearFormData()
-        webview.clearHistory()
-        webview.clearMatches()
-        webview.clearCache(true)
-        webview.webViewClient = object : WebViewClient() {
-
+    private fun initializeInstagramWebView() {
+        lin_webview_instagram.visibility = View.VISIBLE
+        //
+        CookieManager.getInstance().setAcceptThirdPartyCookies(webview_instagram, true)
+        // Call the code below if you want to logout instagram
+        // or if you don't want CookieManager cache your instagram account for the second login
+        //CookieManager.getInstance().removeAllCookies(null)
+        webview_instagram.settings.useWideViewPort = true
+        webview_instagram.settings.loadWithOverviewMode = true
+        webview_instagram.settings.javaScriptEnabled = true
+        webview_instagram.settings.domStorageEnabled = true
+        clearCacheWebView()
+        webview_instagram.webViewClient = object : WebViewClient() {
             var access_token: String = ""
             var authComplete: Boolean = false
 
@@ -111,24 +122,69 @@ class MainActivity : AppCompatActivity(), AuthenticationListener {
                         access_token = access_token.substring(access_token.lastIndexOf("=") + 1)
                         Log.d(TAG, "token: $access_token")
                         authComplete = true
-                        onTokenReceived(access_token)
+                        onInstagramTokenReceived(access_token)
+                        clearCacheWebView()
+                        lin_webview_instagram.visibility = View.INVISIBLE
                     }
                 } else if (url != null && url.contains("?error")) {
                     Log.d(TAG, "getting error fetching access token")
+                    lin_webview_instagram.visibility = View.GONE
                 } else {
                     Log.d(TAG, "outside both$url")
                 }
             }
+        }
+        webview_instagram.loadUrl("https://www.instagram.com/oauth/authorize/?client_id=138036f15e3b4ec080af2bc3f32d3f3e&redirect_uri=http://localhost&scope=public_content&response_type=token")
+    }
 
-            override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
-                // ignore ssl error
-                if (handler != null) {
-                    handler.proceed()
-                } else {
-                    super.onReceivedSslError(view, null, error)
-                }
+    fun onInstagramTokenReceived(auth_token: String) {
+        Toast.makeText(this, "Login Success. auth_token=$auth_token", Toast.LENGTH_SHORT).show()
+    }
+
+    //========================TWITTER============================
+
+    private var twitterConfig: TwitterConfig? = null
+
+    /**
+     * The method must be called in onCreate() of Activity and before setContentView(),
+     * else the login button will be disabled
+     */
+    private fun initializeTwitter() {
+        if (twitterConfig == null) {
+            twitterConfig = TwitterConfig.Builder(this)
+                .logger(DefaultLogger(Log.DEBUG))//enable logging when app is in debug mode
+                .twitterAuthConfig(
+                    TwitterAuthConfig(
+                        getString(R.string.com_twitter_sdk_android_CONSUMER_KEY),
+                        getString(R.string.com_twitter_sdk_android_CONSUMER_SECRET)
+                    )
+                )//pass the created app Consumer KEY and Secret also called API Key and Secret
+                .debug(true)//enable debug mode
+                .build()
+            //finally initialize twitter with created configs
+            Twitter.initialize(twitterConfig)
+        }
+    }
+
+    /**
+     * The method is called in onCreate() and after setContentView()
+     */
+    private fun setCallbackTwitterLogin() {
+        //If you see the error:
+        //Callback URL not approved for this client application. Approved callback URLs can be adjusted in your application settings.
+        //Add twittersdk:// as one callback URL on your twitter app setting https://apps.twitter.com/
+        btn_twitter_login.callback = object : Callback<TwitterSession>() {
+            override fun success(result: Result<TwitterSession>?) {
+                val session = TwitterCore.getInstance().sessionManager.activeSession
+                val authToken = session.authToken
+                val token = authToken.token
+                val secret = authToken.secret
+                Toast.makeText(this@MainActivity, "Twitter $authToken", Toast.LENGTH_LONG).show()
+            }
+
+            override fun failure(exception: TwitterException?) {
+                Toast.makeText(this@MainActivity, "Twitter login failed", Toast.LENGTH_LONG).show()
             }
         }
-        webview.loadUrl("https://www.instagram.com/oauth/authorize/?client_id=138036f15e3b4ec080af2bc3f32d3f3e&redirect_uri=http://localhost&scope=public_content&response_type=token")
     }
 }

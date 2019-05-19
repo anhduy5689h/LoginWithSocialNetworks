@@ -45,7 +45,7 @@
             android:clickable="true"
             android:focusable="true"
             android:orientation="horizontal"
-            android:layout_marginTop="40dp"
+            android:layout_marginTop="60dp"
             android:gravity="center">
         <ImageView
                 android:layout_width="26dp"
@@ -63,14 +63,32 @@
                 android:textSize="18sp"/>
     </LinearLayout>
 
-    <WebView
-            android:id="@+id/webview"
+    <com.twitter.sdk.android.core.identity.TwitterLoginButton
+            android:id="@+id/btn_twitter_login"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="40dp"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/btn_instagram_login"
-            app:layout_constraintBottom_toBottomOf="parent"
-            android:layout_width="0dp"
-            android:layout_height="0dp">
-    </WebView>
+            app:layout_constraintTop_toBottomOf="@id/btn_instagram_login"/>
+
+    <RelativeLayout
+            android:id="@+id/lin_webview_instagram"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:focusable="true"
+            android:paddingStart="30dp"
+            android:paddingEnd="30dp"
+            android:visibility="invisible"
+            android:background="#50000000">
+        <WebView
+                android:id="@+id/webview_instagram"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerInParent="true">
+        </WebView>
+    </RelativeLayout>
+
 
 </android.support.constraint.ConstraintLayout>
